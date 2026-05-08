@@ -22,25 +22,28 @@ jobs:
         run: chmod +x .github/scripts/check_cfg_footer.sh
 
       - name: Run CFG footer check
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
         run: .github/scripts/check_cfg_footer.sh
 
-      - name: Prevent self-triggered commits
-        run: |
-          # 如果上一次提交就是 Action 自己的提交，则直接退出，防止循环
-          last_commit_msg=$(git log -1 --pretty=%B)
-          if echo "$last_commit_msg" | grep -q "fix(cfg): update or add footer"; then
-            echo "Skip auto-commit caused by previous footer update."
-            exit 0
-          fi
-
       - name: Commit and push if needed
+        if: github.event_name == 'push'
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add .
-            git commit -m "fix(cfg): update or add footer section to cfg files"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -- '*.cfg'
+          if ! git diff --cached --quiet; then
+            git commit -m "fix(cfg): update cfg footer dates [skip ci]"
             git push
           else
             echo "No changes needed."
+          fi
+
+      - name: Check pull request result
+        if: github.event_name == 'pull_request'
+        run: |
+          if ! git diff --quiet -- '*.cfg'; then
+            echo "CFG footer dates need updating. Run the footer script locally and commit the changed cfg files."
+            git diff -- '*.cfg'
+            exit 1
           fi
